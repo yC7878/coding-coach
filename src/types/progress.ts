@@ -2,9 +2,18 @@ export type ProblemStatus = "not_started" | "in_progress" | "completed";
 
 export type SessionResult =
   | "independent"
-  | "needed_hint"
-  | "needed_significant_help"
-  | "looked_at_solution";
+  | "syntax_recall"
+  | "syntax_help"
+  | "algorithm_hint"
+  | "significant_help"
+  | "solution";
+
+/** A specific Java API or syntax recall mistake captured during a study session. */
+export interface SyntaxMistake {
+  syntaxId: string;
+  entered: string;
+  expected: string;
+}
 
 /** An immutable record of one finished block of study for a problem. */
 export interface StudySession {
@@ -14,6 +23,8 @@ export interface StudySession {
   durationSeconds: number;
   result?: SessionResult;
   confidence?: number;
+  syntaxMistakes?: SyntaxMistake[];
+  notes?: string;
   pausedDurationSeconds?: number;
 }
 
@@ -47,7 +58,7 @@ export interface ProblemProgress {
 export type ProgressMap = Record<string, ProblemProgress>;
 
 export interface ProgressExport {
-  version: 2;
+  version: 3;
   exportedAt: string;
   progress: ProgressMap;
 }
