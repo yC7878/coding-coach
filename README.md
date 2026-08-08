@@ -4,12 +4,13 @@ NeetCode Coach is a browser-first study tracker for the NeetCode 150. Phase 1 is
 
 ## Phase 1 features
 
-- Polished responsive dashboard with live overall, category, recent-activity, and next-problem views
+- Polished responsive dashboard with a prominent next-problem recommendation, live progress, category, and recent-session views
 - Complete NeetCode 150 dataset across all 18 categories
 - Search plus category, difficulty, and status filters
-- Problem detail pages with NeetCode/LeetCode links and optional 1–5 confidence rating
+- A single persisted study timer with start, pause, resume, finish, and explicit session-result flow
+- Append-only study-session history per problem, with optional 1–5 confidence ratings and time analytics
 - Browser persistence via `localStorage`; no account, server, or database required
-- Versioned JSON export, validated import, and confirmed reset
+- Version 2 JSON export, backward-compatible validated import, and confirmed reset
 
 ## Tech stack
 
@@ -46,9 +47,9 @@ src/
 
 ## Data and persistence
 
-`src/data/problems.json` contains immutable problem metadata. It is never changed when studying. User data is held separately under the `neetcode-coach-progress` browser-storage key. The dataset follows the current official NeetCode 150 category organization (150 problems in 18 categories); LeetCode URLs are included where a public corresponding problem exists. A few NeetCode list items do not have a public LeetCode link, so those are intentionally omitted rather than guessed.
+`src/data/problems.json` contains immutable problem metadata. It is never changed when studying. User data is held separately under the `neetcode-coach-progress` browser-storage key, while an active timer lives under `neetcode-coach-active-session`. Each completed study block is appended to a problem’s `sessions` array—practice never replaces earlier history. The dataset follows the current official NeetCode 150 category organization (150 problems in 18 categories); LeetCode URLs are included where a public corresponding problem exists. A few NeetCode list items do not have a public LeetCode link, so those are intentionally omitted rather than guessed.
 
-The `ProblemProgress` type already reserves optional fields for attempts, solve time, hints, independent solutions, and review dates. That keeps the upcoming coaching features additive.
+The `ProblemProgress` and `StudySession` types already reserve optional fields for attempts, solve time, hints, independent solutions, and review dates. That keeps the upcoming coaching features additive.
 
 ## Planned Phase 2
 
