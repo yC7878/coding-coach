@@ -16,7 +16,7 @@ import {
   startActiveSession,
   updateProblemProgress,
 } from "../services/progressService";
-import type { ActiveStudySession, ProblemProgress, ProgressMap, SessionResult, StudySession } from "../types/progress";
+import type { ActiveStudySession, ProblemProgress, ProgressMap, SessionResult, StudySession, SyntaxMistake } from "../types/progress";
 
 export type StartSessionResult =
   | { type: "started"; session: ActiveStudySession }
@@ -34,7 +34,7 @@ interface ProgressContextValue {
   replaceActiveSession: (problemId: string) => ActiveStudySession;
   pauseSession: () => void;
   resumeSession: () => void;
-  finishSession: (result: SessionResult, confidence?: number) => StudySession | null;
+  finishSession: (result: SessionResult, confidence?: number, syntaxMistakes?: SyntaxMistake[], notes?: string) => StudySession | null;
   replaceProgress: (nextProgress: ProgressMap) => void;
   resetProgress: () => void;
 }
@@ -132,8 +132,8 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
       const resumed = resumeActiveSession();
       if (resumed) setActiveSessionState(resumed);
     },
-    finishSession: (result, confidence) => {
-      const finished = finishActiveSession(new Date(), result, confidence);
+    finishSession: (result, confidence, syntaxMistakes, notes) => {
+      const finished = finishActiveSession(new Date(), result, confidence, syntaxMistakes, notes);
       if (!finished) return null;
       const problemId = activeSession?.problemId;
       if (!problemId) return finished;

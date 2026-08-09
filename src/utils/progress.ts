@@ -1,5 +1,5 @@
 import type { Problem } from "../types/problem";
-import type { ProblemProgress, ProgressMap, SessionResult, StudySession } from "../types/progress";
+import type { ProblemProgress, ProgressMap, SessionResult, StudySession, SyntaxMistake } from "../types/progress";
 
 export interface OverallProgress {
   total: number;
@@ -28,6 +28,24 @@ export interface CompletedSession {
 
 export interface StudySessionRecord extends CompletedSession {
   problem: Problem;
+}
+
+export interface SyntaxMistakeRecord extends SyntaxMistake {
+  problemId: string;
+  sessionId: string;
+  sessionEndedAt: string;
+  result?: SessionResult;
+}
+
+export interface SyntaxMistakeStat {
+  syntaxId: string;
+  count: number;
+}
+
+export interface SyntaxStats {
+  totalMistakes: number;
+  affectedApis: number;
+  mostFrequent: SyntaxMistakeStat[];
 }
 
 export const isCompleted = (progress: ProblemProgress | undefined) => progress?.status === "completed";
@@ -151,13 +169,56 @@ export function formatTimer(durationSeconds: number): string {
 
 const sessionResultLabels: Record<SessionResult, string> = {
   independent: "Solved independently",
-  needed_hint: "Needed a hint",
-  needed_significant_help: "Needed significant help",
-  looked_at_solution: "Looked at the solution",
+  syntax_recall: "Solved with a syntax/recall mistake",
+  syntax_help: "Needed syntax/API help",
+  algorithm_hint: "Needed an algorithm/pattern hint",
+  significant_help: "Needed significant help",
+  solution: "Needed the solution",
 };
 
 export function formatSessionResult(result?: SessionResult): string {
   return result ? sessionResultLabels[result] : "Practice session";
+}
+
+/** Exact syntax/API recall entries, separate from algorithm performance. */
+export function getSyntaxMistakes(progress: ProgressMap): SyntaxMistakeRecord[] {
+  return Object.entries(progress).flatMap(([problemId, problemProgress]) =>
+    problemProgress.sessions.flatMap((session) =>
+      (session.syntaxMistakes ?? []).map((mistake) => ({
+        ...mistake,
+        problemId,
+        sessionId: session.id,
+        sessionEndedAt: session.endedAt,
+        result: session.result,
+      })),
+    ),
+  );
+}
+
+export function getSyntaxMistakeCount(progress: ProgressMap, syntaxId: string): number {
+  return getSyntaxMistakes(progress).filter((mistake) => mistake.syntaxId === syntaxId).length;
+}
+
+export function getMostFrequentSyntaxMistakes(progress: ProgressMap, limit?: number): SyntaxMistakeStat[] {
+  const counts = new Map<string, number>();
+  getSyntaxMistakes(progress).forEach((mistake) => counts.set(mistake.syntaxId, (counts.get(mistake.syntaxId) ?? 0) + 1));
+  const stats = [...counts.entries()]
+    .map(([syntaxId, count]) => ({ syntaxId, count }))
+    .sort((a, b) => b.count - a.count || a.syntaxId.localeCompare(b.syntaxId));
+  return limit === undefined ? stats : stats.slice(0, limit);
+}
+
+export function getSyntaxStats(progress: ProgressMap): SyntaxStats {
+  const mistakes = getSyntaxMistakes(progress);
+  return {
+    totalMistakes: mistakes.length,
+    affectedApis: new Set(mistakes.map((mistake) => mistake.syntaxId)).size,
+    mostFrequent: getMostFrequentSyntaxMistakes(progress),
+  };
+}
+
+export function getProblemSyntaxMistakes(progress: ProgressMap, problemId: string): SyntaxMistakeRecord[] {
+  return getSyntaxMistakes({ [problemId]: progress[problemId] ?? { status: "not_started", sessions: [] } });
 }
 
 export function formatCompletionDate(date?: string): string {

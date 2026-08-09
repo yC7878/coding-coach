@@ -1,0 +1,5 @@
+[
+  {"problemId":"contains-duplicate","repositorySlug":"duplicate-integer"},
+  {"problemId":"valid-anagram","repositorySlug":"is-anagram"},
+  {"problemId":"two-sum","repositorySlug":"two-integer-sum"}
+]

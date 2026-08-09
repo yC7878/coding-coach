@@ -6,13 +6,24 @@ import type {
   ProgressMap,
   SessionResult,
   StudySession,
+  SyntaxMistake,
 } from "../types/progress";
+import type { GithubSyncCache } from "../types/github";
+import type { AlgorithmUnderstanding, AnalysisValue, DataSource, PerformanceDetails } from "../types/performance";
 
 export const PROGRESS_STORAGE_KEY = "neetcode-coach-progress";
 export const ACTIVE_SESSION_STORAGE_KEY = "neetcode-coach-active-session";
 
 const statuses: ProblemStatus[] = ["not_started", "in_progress", "completed"];
-const results: SessionResult[] = ["independent", "needed_hint", "needed_significant_help", "looked_at_solution"];
+const results: SessionResult[] = ["independent", "syntax_recall", "syntax_help", "algorithm_hint", "significant_help", "solution"];
+const legacyResults: Record<string, SessionResult> = {
+  independent: "independent",
+  needed_hint: "algorithm_hint",
+  needed_significant_help: "significant_help",
+  looked_at_solution: "solution",
+};
+const dataSources: DataSource[] = ["user", "github", "analysis", "user_override"];
+const algorithmUnderstandings: AlgorithmUnderstanding[] = ["strong", "developing", "needs_support"];
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -28,23 +39,76 @@ const isNonNegativeNumber = (value: unknown): value is number =>
 
 export const createEmptyProgress = (): ProblemProgress => ({ status: "not_started", sessions: [] });
 
-export const isStudySession = (value: unknown): value is StudySession => {
-  if (!isRecord(value) || typeof value.id !== "string" || !value.id || !isTimestamp(value.startedAt) || !isTimestamp(value.endedAt) || !isNonNegativeNumber(value.durationSeconds)) return false;
-  if (value.result !== undefined && !results.includes(value.result as SessionResult)) return false;
-  if (value.confidence !== undefined && !isConfidence(value.confidence)) return false;
-  return value.pausedDurationSeconds === undefined || isNonNegativeNumber(value.pausedDurationSeconds);
+export const isSyntaxMistake = (value: unknown): value is SyntaxMistake =>
+  isRecord(value) && typeof value.syntaxId === "string" && Boolean(value.syntaxId) && typeof value.entered === "string" && Boolean(value.entered.trim()) && typeof value.expected === "string" && Boolean(value.expected.trim());
+
+function normalizeAnalysisValue<T>(value: unknown, isValue: (candidate: unknown) => candidate is T): AnalysisValue<T> | null {
+  if (!isRecord(value) || !isValue(value.value) || !dataSources.includes(value.source as DataSource)) return null;
+  if (value.confidence !== undefined && (typeof value.confidence !== "number" || value.confidence < 0 || value.confidence > 1)) return null;
+  return { value: value.value, source: value.source as DataSource, ...(typeof value.confidence === "number" ? { confidence: value.confidence } : {}) };
+}
+
+function normalizePerformanceDetails(value: unknown): PerformanceDetails | null {
+  if (!isRecord(value)) return null;
+  const solveTime = value.solveTimeSeconds === undefined ? undefined : normalizeAnalysisValue(value.solveTimeSeconds, isNonNegativeNumber);
+  const result = value.result === undefined ? undefined : normalizeAnalysisValue(value.result, (item): item is SessionResult => typeof item === "string" && results.includes(item as SessionResult));
+  const confidence = value.confidence === undefined ? undefined : normalizeAnalysisValue(value.confidence, isConfidence);
+  const algorithm = value.algorithmUnderstanding === undefined ? undefined : normalizeAnalysisValue(value.algorithmUnderstanding, (item): item is AlgorithmUnderstanding => algorithmUnderstandings.includes(item as AlgorithmUnderstanding));
+  const pattern = value.pattern === undefined ? undefined : normalizeAnalysisValue(value.pattern, (item): item is string => typeof item === "string" && Boolean(item.trim()));
+  const syntaxIssues = value.syntaxIssues === undefined ? undefined : normalizeAnalysisValue(value.syntaxIssues, (item): item is SyntaxMistake[] => Array.isArray(item) && item.every(isSyntaxMistake));
+  const notes = value.notes === undefined ? undefined : normalizeAnalysisValue(value.notes, (item): item is string => typeof item === "string");
+  if ((value.solveTimeSeconds !== undefined && !solveTime) || (value.result !== undefined && !result) || (value.confidence !== undefined && !confidence) || (value.algorithmUnderstanding !== undefined && !algorithm) || (value.pattern !== undefined && !pattern) || (value.syntaxIssues !== undefined && !syntaxIssues) || (value.notes !== undefined && !notes)) return null;
+  return {
+    ...(solveTime ? { solveTimeSeconds: solveTime } : {}),
+    ...(result ? { result } : {}),
+    ...(confidence ? { confidence } : {}),
+    ...(algorithm ? { algorithmUnderstanding: algorithm } : {}),
+    ...(pattern ? { pattern } : {}),
+    ...(syntaxIssues ? { syntaxIssues } : {}),
+    ...(notes ? { notes } : {}),
+  };
+}
+
+const normalizeSessionResult = (value: unknown): SessionResult | undefined | null => {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") return null;
+  return results.includes(value as SessionResult) ? value as SessionResult : legacyResults[value] ?? null;
 };
+
+export const normalizeStudySession = (value: unknown): StudySession | null => {
+  if (!isRecord(value) || typeof value.id !== "string" || !value.id || !isTimestamp(value.startedAt) || !isTimestamp(value.endedAt) || !isNonNegativeNumber(value.durationSeconds)) return null;
+  const result = normalizeSessionResult(value.result);
+  if (result === null || (value.confidence !== undefined && !isConfidence(value.confidence)) || (value.pausedDurationSeconds !== undefined && !isNonNegativeNumber(value.pausedDurationSeconds)) || (value.syntaxMistakes !== undefined && (!Array.isArray(value.syntaxMistakes) || !value.syntaxMistakes.every(isSyntaxMistake))) || (value.notes !== undefined && typeof value.notes !== "string")) return null;
+  return {
+    id: value.id,
+    startedAt: value.startedAt,
+    endedAt: value.endedAt,
+    durationSeconds: value.durationSeconds,
+    ...(result ? { result } : {}),
+    ...(isConfidence(value.confidence) ? { confidence: value.confidence } : {}),
+    ...(Array.isArray(value.syntaxMistakes) && value.syntaxMistakes.length ? { syntaxMistakes: value.syntaxMistakes as SyntaxMistake[] } : {}),
+    ...(typeof value.notes === "string" && value.notes.trim() ? { notes: value.notes.trim() } : {}),
+    ...(isNonNegativeNumber(value.pausedDurationSeconds) ? { pausedDurationSeconds: value.pausedDurationSeconds } : {}),
+  };
+};
+
+export const isStudySession = (value: unknown): value is StudySession => normalizeStudySession(value) !== null;
 
 /** Accepts version 1 records by supplying the new append-only session array. */
 export const normalizeProblemProgress = (value: unknown): ProblemProgress | null => {
   if (!isRecord(value) || !statuses.includes(value.status as ProblemStatus)) return null;
   if (value.completedAt !== undefined && typeof value.completedAt !== "string") return null;
   if (value.confidence !== undefined && !isConfidence(value.confidence)) return null;
-  if (value.sessions !== undefined && (!Array.isArray(value.sessions) || !value.sessions.every(isStudySession))) return null;
+  if (value.sessions !== undefined && !Array.isArray(value.sessions)) return null;
+  const sessions = (value.sessions ?? []).map(normalizeStudySession);
+  if (sessions.some((session) => session === null)) return null;
+  const performance = value.performance === undefined ? undefined : normalizePerformanceDetails(value.performance);
+  if (value.performance !== undefined && !performance) return null;
 
-  const progress: ProblemProgress = { status: value.status as ProblemStatus, sessions: (value.sessions as StudySession[] | undefined) ?? [] };
+  const progress: ProblemProgress = { status: value.status as ProblemStatus, sessions: sessions as StudySession[] };
   if (typeof value.completedAt === "string") progress.completedAt = value.completedAt;
   if (isConfidence(value.confidence)) progress.confidence = value.confidence;
+  if (performance) progress.performance = performance;
   return progress;
 };
 
@@ -76,7 +140,7 @@ const elapsedSeconds = (from: string, now: Date) => Math.max(0, Math.floor((now.
 const createId = () => globalThis.crypto?.randomUUID?.() ?? `session-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
 function readStoredProgress(value: unknown): ProgressMap | null {
-  if (isRecord(value) && (value.version === 1 || value.version === 2) && "progress" in value) return normalizeProgressMap(value.progress);
+  if (isRecord(value) && (value.version === 1 || value.version === 2 || value.version === 3 || value.version === 4) && "progress" in value) return normalizeProgressMap(value.progress);
   return normalizeProgressMap(value); // legacy localStorage stored the map directly
 }
 
@@ -98,7 +162,7 @@ export function setProgress(progress: ProgressMap): void {
   const normalized = normalizeProgressMap(progress);
   if (!normalized) return;
   try {
-    window.localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify({ version: 2, progress: normalized }));
+    window.localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify({ version: 4, progress: normalized }));
   } catch {
     // Browser storage can be unavailable; React state still supports this visit.
   }
@@ -128,13 +192,13 @@ export function clearProgress(): void {
   }
 }
 
-export function createProgressExport(progress: ProgressMap): ProgressExport {
-  return { version: 2, exportedAt: new Date().toISOString(), progress: normalizeProgressMap(progress) ?? {} };
+export function createProgressExport(progress: ProgressMap, githubCache?: GithubSyncCache): ProgressExport {
+  return { version: 4, exportedAt: new Date().toISOString(), progress: normalizeProgressMap(progress) ?? {}, ...(githubCache ? { githubCache } : {}) };
 }
 
-/** Accepts both the original Phase 1 export and the v2 session-aware export. */
+/** Accepts the original Phase 1 export plus v2 sessions, v3 syntax, and v4 performance exports. */
 export function parseProgressImport(value: unknown): ProgressMap | null {
-  if (!isRecord(value) || (value.version !== 1 && value.version !== 2) || !isTimestamp(value.exportedAt)) return null;
+  if (!isRecord(value) || (value.version !== 1 && value.version !== 2 && value.version !== 3 && value.version !== 4) || !isTimestamp(value.exportedAt)) return null;
   return normalizeProgressMap(value.progress);
 }
 
@@ -220,6 +284,8 @@ export function createStudySessionFromActive(
   now = new Date(),
   result?: SessionResult,
   confidence?: number,
+  syntaxMistakes?: SyntaxMistake[],
+  notes?: string,
 ): StudySession {
   const pausedDurationSeconds = active.pausedDurationSeconds + (active.isPaused && active.pausedAt ? elapsedSeconds(active.pausedAt, now) : 0);
   return {
@@ -229,15 +295,17 @@ export function createStudySessionFromActive(
     durationSeconds: getActiveSessionDuration(active, now),
     ...(result ? { result } : {}),
     ...(confidence ? { confidence } : {}),
+    ...(syntaxMistakes?.length ? { syntaxMistakes } : {}),
+    ...(notes?.trim() ? { notes: notes.trim() } : {}),
     ...(pausedDurationSeconds > 0 ? { pausedDurationSeconds } : {}),
   };
 }
 
 /** Ends and clears the active timer; callers append the returned immutable session to progress history. */
-export function finishActiveSession(now = new Date(), result?: SessionResult, confidence?: number): StudySession | null {
+export function finishActiveSession(now = new Date(), result?: SessionResult, confidence?: number, syntaxMistakes?: SyntaxMistake[], notes?: string): StudySession | null {
   const active = getActiveSession();
   if (!active) return null;
-  const session = createStudySessionFromActive(active, now, result, confidence);
+  const session = createStudySessionFromActive(active, now, result, confidence, syntaxMistakes, notes);
   clearActiveSession();
   return session;
 }

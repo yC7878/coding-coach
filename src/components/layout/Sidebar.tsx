@@ -1,9 +1,10 @@
-import { BarChart3, BrainCircuit, LayoutDashboard, ListChecks, Settings, X } from "lucide-react";
+import { BarChart3, BrainCircuit, Braces, LayoutDashboard, ListChecks, Settings, X } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
 const primaryLinks = [
   { to: "/", label: "Dashboard", Icon: LayoutDashboard, end: true },
   { to: "/problems", label: "Problems", Icon: ListChecks },
+  { to: "/syntax", label: "Syntax & Recall", Icon: Braces },
 ];
 
 const secondaryLinks = [

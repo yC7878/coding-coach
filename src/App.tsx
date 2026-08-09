@@ -4,7 +4,8 @@ import { Dashboard } from "./pages/Dashboard";
 import { ProblemDetails } from "./pages/ProblemDetails";
 import { Problems } from "./pages/Problems";
 import { Settings } from "./pages/Settings";
+import { SyntaxRecall } from "./pages/SyntaxRecall";
 
 export default function App() {
-  return <Routes><Route element={<AppLayout />}><Route index element={<Dashboard />} /><Route path="problems" element={<Problems />} /><Route path="problems/:id" element={<ProblemDetails />} /><Route path="settings" element={<Settings />} /><Route path="*" element={<Navigate to="/" replace />} /></Route></Routes>;
+  return <Routes><Route element={<AppLayout />}><Route index element={<Dashboard />} /><Route path="problems" element={<Problems />} /><Route path="problems/:id" element={<ProblemDetails />} /><Route path="syntax" element={<SyntaxRecall />} /><Route path="settings" element={<Settings />} /><Route path="*" element={<Navigate to="/" replace />} /></Route></Routes>;
 }

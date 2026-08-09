@@ -1,3 +1,6 @@
+import type { GithubSyncCache } from "./github";
+import type { PerformanceDetails } from "./performance";
+
 export type ProblemStatus = "not_started" | "in_progress" | "completed";
 
 export type SessionResult =
@@ -46,6 +49,8 @@ export interface ProblemProgress {
   completedAt?: string;
   /** Last reported confidence, retained for quick display and Phase 1 imports. */
   confidence?: number;
+  /** User-editable values that take precedence over imported GitHub analysis. */
+  performance?: PerformanceDetails;
   // Reserved Phase 2 study signals. Keeping them optional avoids future migrations.
   attempts?: number;
   solveTimeMinutes?: number;
@@ -58,7 +63,8 @@ export interface ProblemProgress {
 export type ProgressMap = Record<string, ProblemProgress>;
 
 export interface ProgressExport {
-  version: 3;
+  version: 4;
   exportedAt: string;
   progress: ProgressMap;
+  githubCache?: GithubSyncCache;
 }

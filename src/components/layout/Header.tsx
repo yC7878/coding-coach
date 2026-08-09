@@ -4,6 +4,7 @@ import { useLocation } from "react-router-dom";
 const getHeading = (pathname: string) => {
   if (pathname === "/") return { title: "Dashboard", subtitle: "Track your progress, one thoughtful problem at a time." };
   if (pathname === "/problems") return { title: "Problems", subtitle: "The complete NeetCode 150, organized for focused practice." };
+  if (pathname === "/syntax") return { title: "Syntax & Recall", subtitle: "Practice the Java APIs your sessions show need attention." };
   if (pathname === "/settings") return { title: "Settings", subtitle: "Keep a portable copy of your study progress." };
   return { title: "Problem details", subtitle: "Review the problem and save your progress." };
 };
